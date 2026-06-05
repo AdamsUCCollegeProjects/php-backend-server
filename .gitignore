@@ -1,1 +1,5 @@
 .plan
+.env
+vendor/
+mysql_data/
+*.log
