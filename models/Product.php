@@ -13,6 +13,7 @@ final class Product
         public readonly string $description,
         public readonly string $price,
         public readonly int $stock,
+        public readonly ?string $imageFileId,
         public readonly string $createdAt,
         public readonly string $updatedAt,
     ) {
@@ -30,6 +31,9 @@ final class Product
             description: (string) $row['description'],
             price: (string) $row['price'],
             stock: (int) $row['stock'],
+            imageFileId: isset($row['image_file_id']) && $row['image_file_id'] !== null
+                ? (string) $row['image_file_id']
+                : null,
             createdAt: (string) $row['created_at'],
             updatedAt: (string) $row['updated_at'],
         );

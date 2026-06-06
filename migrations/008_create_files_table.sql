@@ -1,0 +1,26 @@
+CREATE TABLE IF NOT EXISTS files (
+    id CHAR(36) PRIMARY KEY,
+    original_filename VARCHAR(255) NOT NULL,
+    stored_filename VARCHAR(255) NOT NULL,
+    mime_type VARCHAR(127) NOT NULL,
+    file_size BIGINT UNSIGNED NOT NULL,
+    storage_path VARCHAR(512) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS file_thumbnails (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    file_id CHAR(36) NOT NULL,
+    mime_type VARCHAR(127) NOT NULL,
+    file_size BIGINT UNSIGNED NOT NULL,
+    storage_path VARCHAR(512) NOT NULL,
+    width INT UNSIGNED NOT NULL,
+    height INT UNSIGNED NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT file_thumbnails_file_id_foreign
+        FOREIGN KEY (file_id) REFERENCES files (id)
+        ON DELETE CASCADE,
+    INDEX file_thumbnails_file_id_index (file_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

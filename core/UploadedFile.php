@@ -31,6 +31,11 @@ final class UploadedFile
         return $this->clientMimeType;
     }
 
+    public function getTempPath(): string
+    {
+        return $this->tempPath;
+    }
+
     /**
      * @return resource
      */

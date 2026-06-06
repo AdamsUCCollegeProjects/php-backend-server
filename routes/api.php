@@ -51,4 +51,9 @@ return static function (Router $router, RouteDependencies $dependencies): void {
     $router->get('/api/admin/orders', [$dependencies->adminOrderController, 'index'], $admin);
     $router->get('/api/admin/orders/{id}', [$dependencies->adminOrderController, 'show'], $admin);
     $router->patch('/api/admin/orders/{id}', [$dependencies->adminOrderController, 'updateStatus'], $admin);
+
+    $router->post('/api/files', [$dependencies->fileController, 'store'], $admin);
+    $router->get('/api/files/{id}/thumbnail', [$dependencies->fileController, 'showThumbnail']);
+    $router->get('/api/files/{id}', [$dependencies->fileController, 'show']);
+    $router->delete('/api/files/{id}', [$dependencies->fileController, 'destroy'], $admin);
 };

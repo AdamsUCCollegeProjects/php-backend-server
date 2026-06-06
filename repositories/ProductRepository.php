@@ -10,7 +10,7 @@ use RuntimeException;
 
 final class ProductRepository
 {
-    private const SELECT_COLUMNS = 'id, category_id, name, description, price, stock, created_at, updated_at';
+    private const SELECT_COLUMNS = 'id, category_id, name, description, price, stock, image_file_id, created_at, updated_at';
 
     public function __construct(private readonly PDO $pdo)
     {
@@ -79,13 +79,20 @@ final class ProductRepository
     }
 
     /**
-     * @param array{category_id: int, name: string, description: string, price: string, stock: int} $data
+     * @param array{
+     *     category_id: int,
+     *     name: string,
+     *     description: string,
+     *     price: string,
+     *     stock: int,
+     *     image_file_id: string|null,
+     * } $data
      */
     public function create(array $data): Product
     {
         $statement = $this->pdo->prepare(
-            'INSERT INTO products (category_id, name, description, price, stock)
-             VALUES (:category_id, :name, :description, :price, :stock)',
+            'INSERT INTO products (category_id, name, description, price, stock, image_file_id)
+             VALUES (:category_id, :name, :description, :price, :stock, :image_file_id)',
         );
         $statement->execute($data);
 
@@ -99,7 +106,14 @@ final class ProductRepository
     }
 
     /**
-     * @param array{category_id: int, name: string, description: string, price: string, stock: int} $data
+     * @param array{
+     *     category_id: int,
+     *     name: string,
+     *     description: string,
+     *     price: string,
+     *     stock: int,
+     *     image_file_id: string|null,
+     * } $data
      */
     public function update(int $id, array $data): ?Product
     {
@@ -109,7 +123,8 @@ final class ProductRepository
                  name = :name,
                  description = :description,
                  price = :price,
-                 stock = :stock
+                 stock = :stock,
+                 image_file_id = :image_file_id
              WHERE id = :id',
         );
         $statement->execute(['id' => $id] + $data);

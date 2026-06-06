@@ -7,19 +7,25 @@ namespace App\Services;
 use App\Core\Validator;
 use App\Models\Product;
 use App\Repositories\CategoryRepository;
+use App\Repositories\FileRepository;
 use App\Repositories\ProductRepository;
 
 final class ProductService
 {
     private const MAX_NAME_LENGTH = 200;
     private const MAX_DESCRIPTION_LENGTH = 5000;
+    private const FILE_URL_PREFIX = '/api/files/';
+    private const THUMBNAIL_URL_SUFFIX = '/thumbnail';
+    private const UUID_PATTERN = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i';
     private const ERROR_VALIDATION = 'Validation failed';
     private const ERROR_NOT_FOUND = 'Product not found';
     private const ERROR_CATEGORY_NOT_FOUND = 'Category not found';
+    private const ERROR_FILE_NOT_FOUND = 'Image file not found';
 
     public function __construct(
         private readonly ProductRepository $productRepository,
         private readonly CategoryRepository $categoryRepository,
+        private readonly FileRepository $fileRepository,
         private readonly Validator $validator,
     ) {
     }
@@ -67,7 +73,13 @@ final class ProductService
             return $validation;
         }
 
-        $product = $this->productRepository->create($validation['data']);
+        $imageFileId = $this->resolveImageFileId($input, null);
+
+        if (is_array($imageFileId)) {
+            return $imageFileId;
+        }
+
+        $product = $this->productRepository->create($validation['data'] + ['image_file_id' => $imageFileId]);
 
         return ['ok' => true, 'data' => $this->formatProduct($product)];
     }
@@ -78,7 +90,9 @@ final class ProductService
      */
     public function update(int $id, array $input): array
     {
-        if ($this->productRepository->findById($id) === null) {
+        $existing = $this->productRepository->findById($id);
+
+        if ($existing === null) {
             return $this->notFoundFailure();
         }
 
@@ -88,7 +102,16 @@ final class ProductService
             return $validation;
         }
 
-        $product = $this->productRepository->update($id, $validation['data']);
+        $imageFileId = $this->resolveImageFileId($input, $existing->imageFileId);
+
+        if (is_array($imageFileId)) {
+            return $imageFileId;
+        }
+
+        $product = $this->productRepository->update(
+            $id,
+            $validation['data'] + ['image_file_id' => $imageFileId],
+        );
 
         if ($product === null) {
             return $this->notFoundFailure();
@@ -140,6 +163,35 @@ final class ProductService
                 'stock' => (int) $input['stock'],
             ],
         ];
+    }
+
+    /**
+     * @param array<string, mixed> $input
+     * @return string|null|array{ok: false, status: int, error: string, details?: array<string, string>}
+     */
+    private function resolveImageFileId(array $input, ?string $existingImageFileId): string|null|array
+    {
+        if (! array_key_exists('image_file_id', $input)) {
+            return $existingImageFileId;
+        }
+
+        $rawValue = $input['image_file_id'];
+
+        if ($rawValue === null || $rawValue === '') {
+            return null;
+        }
+
+        $fileId = trim((string) $rawValue);
+
+        if (! preg_match(self::UUID_PATTERN, $fileId)) {
+            return $this->validationFailure(['image_file_id' => 'image_file_id must be a valid UUID']);
+        }
+
+        if (! $this->fileRepository->exists($fileId)) {
+            return ['ok' => false, 'status' => 404, 'error' => self::ERROR_FILE_NOT_FOUND];
+        }
+
+        return $fileId;
     }
 
     /**
@@ -224,19 +276,29 @@ final class ProductService
     }
 
     /**
-     * @return array{id: int, category_id: int, name: string, description: string, price: string, stock: int, created_at: string, updated_at: string}
+     * @return array<string, mixed>
      */
     private function formatProduct(Product $product): array
     {
-        return [
+        $payload = [
             'id' => $product->id,
             'category_id' => $product->categoryId,
             'name' => $product->name,
             'description' => $product->description,
             'price' => $product->price,
             'stock' => $product->stock,
+            'image_file_id' => $product->imageFileId,
             'created_at' => $product->createdAt,
             'updated_at' => $product->updatedAt,
         ];
+
+        if ($product->imageFileId === null) {
+            return $payload;
+        }
+
+        $payload['image_url'] = self::FILE_URL_PREFIX . $product->imageFileId;
+        $payload['thumbnail_url'] = self::FILE_URL_PREFIX . $product->imageFileId . self::THUMBNAIL_URL_SUFFIX;
+
+        return $payload;
     }
 }

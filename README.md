@@ -47,6 +47,10 @@ Expected health response:
 | GET | `/api/admin/orders` | Admin JWT | All orders |
 | GET | `/api/admin/orders/{id}` | Admin JWT | Any order detail |
 | PATCH | `/api/admin/orders/{id}` | Admin JWT | Update order status |
+| POST | `/api/files` | Admin JWT | Upload file (`multipart/form-data`, field `file`) |
+| GET | `/api/files/{id}` | No | Stream file by UUID (`?download=1` for attachment) |
+| GET | `/api/files/{id}/thumbnail` | No | Stream image thumbnail (404 for non-images) |
+| DELETE | `/api/files/{id}` | Admin JWT | Delete file, thumbnail, and metadata |
 
 **Auth legend:** *Bearer JWT* = any authenticated user. *Admin JWT* = user with `role: admin` in the token payload.
 
@@ -147,9 +151,12 @@ curl -s -X POST "$BASE/api/admin/products" \
     "name": "Classic T-Shirt",
     "description": "Cotton crew neck",
     "price": "19.99",
-    "stock": 100
+    "stock": 100,
+    "image_file_id": "550e8400-e29b-41d4-a716-446655440000"
   }'
 ```
+
+The optional `image_file_id` is a UUID returned from `POST /api/files`. Omit it to create a product without an image.
 
 **Admin — update / delete**
 
@@ -162,6 +169,51 @@ curl -s -X PUT "$BASE/api/admin/products/1" \
 curl -s -X DELETE "$BASE/api/admin/products/1" \
   -H "Authorization: Bearer $ADMIN_TOKEN"
 ```
+
+### File storage
+
+**Admin — upload file**
+
+```bash
+curl -s -X POST "$BASE/api/files" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -F "file=@photo.jpg"
+```
+
+Images are optimized to WebP and a thumbnail is generated automatically. PDFs are stored as-is.
+
+**Download file (inline in browser)**
+
+```bash
+curl -s "$BASE/api/files/550e8400-e29b-41d4-a716-446655440000" --output photo.webp
+```
+
+**Force download (attachment disposition)**
+
+```bash
+curl -s "$BASE/api/files/550e8400-e29b-41d4-a716-446655440000?download=1" --output photo.webp
+```
+
+**Download thumbnail**
+
+```bash
+curl -s "$BASE/api/files/550e8400-e29b-41d4-a716-446655440000/thumbnail" --output thumb.webp
+```
+
+**Admin — delete file**
+
+```bash
+curl -s -X DELETE "$BASE/api/files/550e8400-e29b-41d4-a716-446655440000" \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+```
+
+Deleting a file clears any product `image_file_id` that references it (FK `ON DELETE SET NULL`).
+
+**Typical product image workflow**
+
+1. Upload: `POST /api/files` with `-F file=@photo.jpg` → note the returned `id`
+2. Create product: `POST /api/admin/products` with `"image_file_id": "<uuid>"`
+3. Product responses include `image_url` and `thumbnail_url` for the linked file
 
 ### Cart and checkout
 
@@ -305,6 +357,59 @@ Response `200`:
 { "id": 1, "email": "user@example.com", "name": "Jane Doe", "role": "user", "created_at": "2026-06-06 12:00:00" }
 ```
 
+**Upload file** — `POST /api/files` (admin, `multipart/form-data`)
+
+```
+Authorization: Bearer <admin-jwt>
+Content-Type: multipart/form-data
+
+file=<binary>
+```
+
+Response `201`:
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "original_filename": "photo.jpg",
+  "stored_filename": "550e8400-e29b-41d4-a716-446655440000.webp",
+  "mime_type": "image/webp",
+  "file_size": 84210,
+  "storage_path": "55/0e/550e8400-e29b-41d4-a716-446655440000.webp",
+  "thumbnail": {
+    "mime_type": "image/webp",
+    "file_size": 4200,
+    "width": 300,
+    "height": 225,
+    "url": "/api/files/550e8400-e29b-41d4-a716-446655440000/thumbnail"
+  },
+  "url": "/api/files/550e8400-e29b-41d4-a716-446655440000",
+  "created_at": "2026-06-06 12:00:00"
+}
+```
+
+**Download file** — `GET /api/files/{id}`
+
+Returns a streamed body with `Content-Type` set to the stored MIME type and `Content-Disposition: inline`. Add `?download=1` for `Content-Disposition: attachment`.
+
+**Product with image** — `GET /api/products/{id}`
+
+```json
+{
+  "id": 1,
+  "category_id": 1,
+  "name": "Blue T-Shirt",
+  "description": "Cotton crew neck",
+  "price": "19.99",
+  "stock": 100,
+  "image_file_id": "550e8400-e29b-41d4-a716-446655440000",
+  "image_url": "/api/files/550e8400-e29b-41d4-a716-446655440000",
+  "thumbnail_url": "/api/files/550e8400-e29b-41d4-a716-446655440000/thumbnail",
+  "created_at": "2026-06-06 12:00:00",
+  "updated_at": "2026-06-06 12:00:00"
+}
+```
+
 ### Error responses
 
 All errors return JSON with a consistent shape:
@@ -322,6 +427,8 @@ The `details` field is included when field-level validation errors exist. When `
 | 403 | Authenticated but not authorized (e.g. non-admin on admin routes, or viewing another user's order) |
 | 404 | Route or resource not found |
 | 409 | Email already registered |
+| 413 | Upload exceeds maximum file size |
+| 415 | Unsupported or invalid file MIME type |
 | 500 | Unhandled server error |
 | 503 | Database unreachable (`/health` only) |
 
@@ -350,7 +457,7 @@ Step-by-step:
 4. **Controller** reads the request, delegates to a service, and maps the result to a `Response`.
 5. **Service** applies business rules (validation, stock checks, transactional checkout).
 6. **Repository** executes prepared SQL against MySQL via PDO.
-7. **`Response::send()`** sets the HTTP status, `Content-Type: application/json`, and echoes the JSON body.
+7. **`Response::send()`** sets the HTTP status and body — JSON for API responses, or a streamed binary body for file downloads (`Content-Type`, `Content-Length`, `Content-Disposition`).
 8. If any uncaught `Throwable` escapes, **`ExceptionHandler`** logs it via Monolog and returns a `500` JSON error (stack details only when `APP_DEBUG=true`).
 
 The `/health` route is registered before database-dependent services are initialized, so it can return `503` even when MySQL is down.
@@ -438,6 +545,8 @@ Applied migrations (in order):
 | `005_create_cart_items_table.sql` | `cart_items` table |
 | `006_create_orders_table.sql` | `orders` table |
 | `007_create_order_items_table.sql` | `order_items` table |
+| `008_create_files_table.sql` | `files` and `file_thumbnails` tables |
+| `009_add_product_image_file_id.sql` | `image_file_id` FK on `products` |
 
 The `migrations` tracking table records which `.sql` files have been applied.
 
@@ -453,6 +562,7 @@ flowchart LR
   app -->|"PDO mysql://db:3306"| db["db (mysql:8)"]
   db --> volume["mysql_data volume"]
   app --> mount[".:/var/www/html volume mount"]
+  app --> storageMount["./storage:/var/www/html/storage"]
 ```
 
 | Service | Image / build | Role |
@@ -462,16 +572,65 @@ flowchart LR
 
 The `app` container:
 
-- Installs the PDO MySQL extension
+- Installs the PDO MySQL extension and GD (WebP/JPEG/PNG support for image processing)
 - Exposes port `8000` (configurable via `APP_PORT`)
 - Reads environment from `.env`
 - Logs to stdout via Monolog (visible with `docker compose logs app`)
+- Persists uploaded files via the `./storage` bind mount (survives container restarts; gitignored except `.gitkeep`)
 
 The `db` container:
 
 - Creates database and user from env vars
 - Persists data in the `mysql_data` Docker volume
 - Exposes port `3306` for optional host-side debugging
+
+---
+
+## File storage architecture
+
+Upload, storage, image optimization, download, and deletion are handled by a layered file storage system. Disk I/O is abstracted behind `StorageProviderInterface` so an S3-compatible provider can be swapped in later without changing `FileService`.
+
+```mermaid
+flowchart TB
+  subgraph http [HTTP Layer]
+    FileController
+  end
+  subgraph business [Business Layer]
+    FileService
+    ImageProcessor
+  end
+  subgraph data [Data Layer]
+    FileRepository
+    StorageProviderInterface
+    LocalStorageProvider
+  end
+  FileController --> FileService
+  FileService --> ImageProcessor
+  FileService --> FileRepository
+  FileService --> StorageProviderInterface
+  StorageProviderInterface --> LocalStorageProvider
+  LocalStorageProvider --> Disk["storage/ (Docker volume)"]
+  FileRepository --> MySQL
+```
+
+| Path | Purpose |
+|------|---------|
+| `config/storage.php` | Env-driven storage and image settings |
+| `storage/` | Persisted files (gitignored; bind-mounted in Docker) |
+| `storage/providers/StorageProviderInterface.php` | Storage backend contract |
+| `storage/providers/LocalStorageProvider.php` | Local disk provider with path traversal prevention |
+| `core/UploadedFile.php` | Wrapper around a `$_FILES` entry |
+| `core/UuidGenerator.php` | UUID v4 generation for file IDs and sharded paths |
+| `services/FileService.php` | Upload validation, image pipeline, download, delete |
+| `services/ImageProcessor.php` | GD-based WebP optimization and thumbnail generation |
+| `repositories/FileRepository.php` | `files` and `file_thumbnails` persistence |
+| `models/FileRecord.php` | File metadata entity |
+| `models/FileThumbnail.php` | Thumbnail metadata entity |
+| `controllers/FileController.php` | File upload, download, thumbnail, delete endpoints |
+
+**Sharding:** files are stored under `{uuid[0:2]}/{uuid[2:4]}/{uuid}.webp` (images) or `{uuid[0:2]}/{uuid[2:4]}/{uuid}.{ext}` (non-images).
+
+**Future S3 swap:** implement `S3StorageProvider` against `StorageProviderInterface` and change the provider instantiation in `core/RouteDependencies.php` — no changes to `FileService` or controllers required.
 
 ---
 
@@ -494,6 +653,7 @@ The `db` container:
 | `controllers/OrderController.php` | User order history |
 | `controllers/AdminDashboardController.php` | Admin dashboard stats |
 | `controllers/AdminOrderController.php` | Admin order list, detail, status update |
+| `controllers/FileController.php` | File upload, download, thumbnail, delete |
 | `controllers/HealthController.php` | `GET /health` with database ping |
 | `services/*` | Business logic, validation, response formatting |
 | `repositories/*` | SQL queries with prepared statements |
@@ -501,8 +661,8 @@ The `db` container:
 | `middleware/AuthMiddleware.php` | JWT validation; sets `userId` and `role` on request |
 | `middleware/AdminMiddleware.php` | Requires admin role |
 | `core/Router.php` | Method/path matching, path params, middleware pipeline |
-| `core/Request.php` | HTTP request wrapper (method, path, headers, JSON body, query string, attributes) |
-| `core/Response.php` | JSON response builder with consistent error shape |
+| `core/Request.php` | HTTP request wrapper (method, path, headers, JSON/multipart body, uploads, query string, attributes) |
+| `core/Response.php` | JSON and streamed download response builder |
 | `core/ExceptionHandler.php` | Logs and formats uncaught exceptions as JSON 500 |
 | `core/Validator.php` | Rule-based field validation |
 | `core/Database.php` | PDO singleton factory |
@@ -532,6 +692,12 @@ Copy `.env.example` to `.env` and adjust as needed:
 | `DB_PASSWORD` | `secret` | Database password |
 | `JWT_SECRET` | — | HMAC secret for signing JWTs (change in production) |
 | `JWT_TTL_SECONDS` | `3600` | Token lifetime in seconds |
+| `STORAGE_PATH` | `/var/www/html/storage` | Absolute path to file storage root |
+| `STORAGE_MAX_UPLOAD_BYTES` | `10485760` | Maximum upload size in bytes (10 MB) |
+| `STORAGE_ALLOWED_MIME_TYPES` | `image/jpeg,image/png,image/gif,image/webp,application/pdf` | Comma-separated MIME allowlist |
+| `IMAGE_MAX_DIMENSION` | `1920` | Max image width/height before downscaling |
+| `IMAGE_THUMBNAIL_DIMENSION` | `300` | Max thumbnail width/height |
+| `IMAGE_WEBP_QUALITY` | `80` | WebP compression quality (0–100) |
 
 ---
 

@@ -12,6 +12,7 @@ use App\Controllers\AuthController;
 use App\Controllers\CartController;
 use App\Controllers\CategoryController;
 use App\Controllers\CheckoutController;
+use App\Controllers\FileController;
 use App\Controllers\HealthController;
 use App\Controllers\OrderController;
 use App\Controllers\ProductController;
@@ -21,6 +22,7 @@ use App\Middleware\AuthMiddleware;
 use App\Repositories\AdminStatsRepository;
 use App\Repositories\CartRepository;
 use App\Repositories\CategoryRepository;
+use App\Repositories\FileRepository;
 use App\Repositories\OrderRepository;
 use App\Repositories\ProductRepository;
 use App\Repositories\UserRepository;
@@ -28,10 +30,13 @@ use App\Services\AdminDashboardService;
 use App\Services\AuthService;
 use App\Services\CartService;
 use App\Services\CategoryService;
+use App\Services\FileService;
+use App\Services\ImageProcessor;
 use App\Services\JwtService;
 use App\Services\OrderService;
 use App\Services\ProductService;
 use App\Services\UserService;
+use App\Storage\Providers\LocalStorageProvider;
 
 final class RouteDependencies
 {
@@ -48,6 +53,7 @@ final class RouteDependencies
         public readonly OrderController $orderController,
         public readonly AdminDashboardController $adminDashboardController,
         public readonly AdminOrderController $adminOrderController,
+        public readonly FileController $fileController,
         public readonly AuthMiddleware $authMiddleware,
         public readonly AdminMiddleware $adminMiddleware,
     ) {
@@ -62,8 +68,21 @@ final class RouteDependencies
         $cartRepository = new CartRepository($pdo);
         $orderRepository = new OrderRepository($pdo, $productRepository, $cartRepository);
         $adminStatsRepository = new AdminStatsRepository($pdo);
+        $fileRepository = new FileRepository($pdo);
         $validator = new Validator();
         $logger = Logger::getInstance();
+
+        /** @var array{
+         *     path: string,
+         *     max_upload_bytes: int,
+         *     allowed_mime_types: list<string>,
+         *     image_max_dimension: int,
+         *     image_thumbnail_dimension: int,
+         *     image_webp_quality: int,
+         * } $storageConfig */
+        $storageConfig = require dirname(__DIR__) . '/config/storage.php';
+
+        $storageProvider = new LocalStorageProvider($storageConfig['path']);
 
         /** @var array{secret: string, ttl_seconds: int, algorithm: string} $jwtConfig */
         $jwtConfig = require dirname(__DIR__) . '/config/jwt.php';
@@ -77,10 +96,18 @@ final class RouteDependencies
         $authService = new AuthService($userRepository, $jwtService, $validator, $logger);
         $userService = new UserService($userRepository);
         $categoryService = new CategoryService($categoryRepository, $validator);
-        $productService = new ProductService($productRepository, $categoryRepository, $validator);
+        $productService = new ProductService($productRepository, $categoryRepository, $fileRepository, $validator);
         $cartService = new CartService($cartRepository, $productRepository, $validator);
         $orderService = new OrderService($orderRepository, $cartRepository, $validator);
         $adminDashboardService = new AdminDashboardService($adminStatsRepository, $orderService);
+        $imageProcessor = new ImageProcessor($storageConfig);
+        $fileService = new FileService(
+            $fileRepository,
+            $storageProvider,
+            $imageProcessor,
+            $storageConfig,
+            $logger,
+        );
 
         return new self(
             new HealthController(),
@@ -95,6 +122,7 @@ final class RouteDependencies
             new OrderController($orderService),
             new AdminDashboardController($adminDashboardService),
             new AdminOrderController($orderService),
+            new FileController($fileService),
             new AuthMiddleware($jwtService),
             new AdminMiddleware(),
         );
