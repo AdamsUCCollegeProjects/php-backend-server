@@ -2,4 +2,6 @@
 .env
 vendor/
 mysql_data/
+storage/*
+!storage/.gitkeep
 *.log
