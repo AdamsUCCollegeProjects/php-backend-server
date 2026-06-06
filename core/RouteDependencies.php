@@ -5,17 +5,28 @@ declare(strict_types=1);
 namespace App\Core;
 
 use App\Controllers\AdminCategoryController;
+use App\Controllers\AdminProductController;
 use App\Controllers\AuthController;
+use App\Controllers\CartController;
 use App\Controllers\CategoryController;
+use App\Controllers\CheckoutController;
 use App\Controllers\HealthController;
+use App\Controllers\OrderController;
+use App\Controllers\ProductController;
 use App\Controllers\ProfileController;
 use App\Middleware\AdminMiddleware;
 use App\Middleware\AuthMiddleware;
+use App\Repositories\CartRepository;
 use App\Repositories\CategoryRepository;
+use App\Repositories\OrderRepository;
+use App\Repositories\ProductRepository;
 use App\Repositories\UserRepository;
 use App\Services\AuthService;
+use App\Services\CartService;
 use App\Services\CategoryService;
 use App\Services\JwtService;
+use App\Services\OrderService;
+use App\Services\ProductService;
 use App\Services\UserService;
 
 final class RouteDependencies
@@ -26,6 +37,11 @@ final class RouteDependencies
         public readonly ProfileController $profileController,
         public readonly CategoryController $categoryController,
         public readonly AdminCategoryController $adminCategoryController,
+        public readonly ProductController $productController,
+        public readonly AdminProductController $adminProductController,
+        public readonly CartController $cartController,
+        public readonly CheckoutController $checkoutController,
+        public readonly OrderController $orderController,
         public readonly AuthMiddleware $authMiddleware,
         public readonly AdminMiddleware $adminMiddleware,
     ) {
@@ -36,6 +52,9 @@ final class RouteDependencies
         $pdo = Database::getConnection();
         $userRepository = new UserRepository($pdo);
         $categoryRepository = new CategoryRepository($pdo);
+        $productRepository = new ProductRepository($pdo);
+        $cartRepository = new CartRepository($pdo);
+        $orderRepository = new OrderRepository($pdo, $productRepository, $cartRepository);
         $validator = new Validator();
         $logger = Logger::getInstance();
 
@@ -51,6 +70,9 @@ final class RouteDependencies
         $authService = new AuthService($userRepository, $jwtService, $validator, $logger);
         $userService = new UserService($userRepository);
         $categoryService = new CategoryService($categoryRepository, $validator);
+        $productService = new ProductService($productRepository, $categoryRepository, $validator);
+        $cartService = new CartService($cartRepository, $productRepository, $validator);
+        $orderService = new OrderService($orderRepository, $cartRepository, $validator);
 
         return new self(
             new HealthController(),
@@ -58,6 +80,11 @@ final class RouteDependencies
             new ProfileController($userService),
             new CategoryController($categoryService),
             new AdminCategoryController($categoryService),
+            new ProductController($productService),
+            new AdminProductController($productService),
+            new CartController($cartService),
+            new CheckoutController($orderService),
+            new OrderController($orderService),
             new AuthMiddleware($jwtService),
             new AdminMiddleware(),
         );

@@ -30,4 +30,20 @@ return static function (Router $router, RouteDependencies $dependencies): void {
     $router->post('/api/admin/categories', [$dependencies->adminCategoryController, 'store'], $admin);
     $router->put('/api/admin/categories/{id}', [$dependencies->adminCategoryController, 'update'], $admin);
     $router->delete('/api/admin/categories/{id}', [$dependencies->adminCategoryController, 'destroy'], $admin);
+
+    $router->get('/api/products', [$dependencies->productController, 'index']);
+    $router->get('/api/products/{id}', [$dependencies->productController, 'show']);
+
+    $router->post('/api/admin/products', [$dependencies->adminProductController, 'store'], $admin);
+    $router->put('/api/admin/products/{id}', [$dependencies->adminProductController, 'update'], $admin);
+    $router->delete('/api/admin/products/{id}', [$dependencies->adminProductController, 'destroy'], $admin);
+
+    $router->get('/api/cart', [$dependencies->cartController, 'show'], $auth);
+    $router->post('/api/cart/items', [$dependencies->cartController, 'upsertItem'], $auth);
+    $router->delete('/api/cart/items/{productId}', [$dependencies->cartController, 'removeItem'], $auth);
+
+    $router->post('/api/checkout', [$dependencies->checkoutController, 'store'], $auth);
+
+    $router->get('/api/orders', [$dependencies->orderController, 'index'], $auth);
+    $router->get('/api/orders/{id}', [$dependencies->orderController, 'show'], $auth);
 };
