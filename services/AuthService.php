@@ -89,7 +89,42 @@ final class AuthService
 
         return [
             'ok' => true,
-            'data' => $this->jwtService->generateToken($user->id, $user->email),
+            'data' => $this->jwtService->generateToken($user->id, $user->email, $user->role),
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $input
+     * @return array{ok: true, data: array<string, mixed>}|array{ok: false, status: int, error: string, details?: array<string, string>}
+     */
+    public function registerAdmin(array $input): array
+    {
+        $errors = $this->validator->validate($input, $this->registerRules());
+
+        if ($errors !== []) {
+            return $this->validationFailure($errors);
+        }
+
+        $email = (string) $input['email'];
+        $password = (string) $input['password'];
+        $name = (string) $input['name'];
+
+        $this->logger->info('Admin registration attempt', ['email' => $email]);
+
+        if ($this->userRepository->findByEmail($email) !== null) {
+            return [
+                'ok' => false,
+                'status' => 409,
+                'error' => self::ERROR_DUPLICATE_EMAIL,
+            ];
+        }
+
+        $passwordHash = password_hash($password, PASSWORD_DEFAULT);
+        $user = $this->userRepository->create($email, $passwordHash, $name, User::ROLE_ADMIN);
+
+        return [
+            'ok' => true,
+            'data' => $this->formatUser($user),
         ];
     }
 
@@ -131,7 +166,7 @@ final class AuthService
     }
 
     /**
-     * @return array{id: int, email: string, name: string, created_at: string}
+     * @return array{id: int, email: string, name: string, role: string, created_at: string}
      */
     private function formatUser(User $user): array
     {
@@ -139,6 +174,7 @@ final class AuthService
             'id' => $user->id,
             'email' => $user->email,
             'name' => $user->name,
+            'role' => $user->role,
             'created_at' => $user->createdAt,
         ];
     }

@@ -6,6 +6,8 @@ namespace App\Core;
 
 final class Router
 {
+    public const ATTRIBUTE_ROUTE_PARAMS = 'routeParams';
+
     /** @var list<array{method: string, path: string, handler: callable, middleware: list<callable>}> */
     private array $routes = [];
 
@@ -37,20 +39,72 @@ final class Router
         $this->add('POST', $path, $handler, $middleware);
     }
 
+    public function put(string $path, callable $handler, array $middleware = []): void
+    {
+        $this->add('PUT', $path, $handler, $middleware);
+    }
+
+    public function patch(string $path, callable $handler, array $middleware = []): void
+    {
+        $this->add('PATCH', $path, $handler, $middleware);
+    }
+
+    public function delete(string $path, callable $handler, array $middleware = []): void
+    {
+        $this->add('DELETE', $path, $handler, $middleware);
+    }
+
     public function dispatch(Request $request): Response
     {
         $path = $this->normalizePath($request->getPath());
         $method = $request->getMethod();
 
         foreach ($this->routes as $route) {
-            if ($route['method'] !== $method || $route['path'] !== $path) {
+            if ($route['method'] !== $method) {
                 continue;
+            }
+
+            $params = $this->matchPath($route['path'], $path);
+
+            if ($params === null) {
+                continue;
+            }
+
+            if ($params !== []) {
+                $request->setAttribute(self::ATTRIBUTE_ROUTE_PARAMS, $params);
             }
 
             return $this->runPipeline($request, $route['middleware'], $route['handler']);
         }
 
         return Response::error('Not found', 404);
+    }
+
+    /**
+     * @return array<string, string>|null Empty array for exact match, params for pattern match, null if no match
+     */
+    private function matchPath(string $routePath, string $requestPath): ?array
+    {
+        if (! str_contains($routePath, '{')) {
+            return $routePath === $requestPath ? [] : null;
+        }
+
+        $pattern = preg_replace('#\{([^}]+)\}#', '(?P<$1>[^/]+)', $routePath);
+        $pattern = '#^' . $pattern . '$#';
+
+        if (! preg_match($pattern, $requestPath, $matches)) {
+            return null;
+        }
+
+        $params = [];
+
+        foreach ($matches as $key => $value) {
+            if (is_string($key)) {
+                $params[$key] = $value;
+            }
+        }
+
+        return $params;
     }
 
     /**

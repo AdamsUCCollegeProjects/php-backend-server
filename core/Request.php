@@ -12,23 +12,27 @@ final class Request
     /**
      * @param array<string, string> $headers
      * @param array<string, mixed> $body
+     * @param array<string, string> $query
      */
     public function __construct(
         private readonly string $method,
         private readonly string $path,
         private readonly array $headers,
         private readonly array $body,
+        private readonly array $query = [],
     ) {
     }
 
     public static function fromGlobals(): self
     {
         $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
-        $path = self::parsePath($_SERVER['REQUEST_URI'] ?? '/');
+        $uri = $_SERVER['REQUEST_URI'] ?? '/';
+        $path = self::parsePath($uri);
         $headers = self::parseHeaders();
         $body = self::parseBody($headers);
+        $query = self::parseQuery($uri);
 
-        return new self($method, $path, $headers, $body);
+        return new self($method, $path, $headers, $body, $query);
     }
 
     public function getMethod(): string
@@ -69,6 +73,19 @@ final class Request
         return $this->body[$key] ?? $default;
     }
 
+    /**
+     * @return array<string, string>
+     */
+    public function getQuery(): array
+    {
+        return $this->query;
+    }
+
+    public function getQueryValue(string $key, mixed $default = null): mixed
+    {
+        return $this->query[$key] ?? $default;
+    }
+
     public function setAttribute(string $key, mixed $value): void
     {
         $this->attributes[$key] = $value;
@@ -88,6 +105,38 @@ final class Request
         }
 
         return rtrim($path, '/') ?: '/';
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private static function parseQuery(string $uri): array
+    {
+        $queryString = parse_url($uri, PHP_URL_QUERY);
+
+        if (! is_string($queryString) || $queryString === '') {
+            return [];
+        }
+
+        parse_str($queryString, $parsed);
+
+        if (! is_array($parsed)) {
+            return [];
+        }
+
+        $query = [];
+
+        foreach ($parsed as $key => $value) {
+            if (! is_string($key)) {
+                continue;
+            }
+
+            if (is_string($value) || is_numeric($value)) {
+                $query[$key] = (string) $value;
+            }
+        }
+
+        return $query;
     }
 
     /**

@@ -43,4 +43,19 @@ final class AuthController
 
         return Response::json($result['data']);
     }
+
+    public function registerAdmin(Request $request): Response
+    {
+        $result = $this->authService->registerAdmin($request->getBody());
+
+        if (! $result['ok']) {
+            return Response::error(
+                $result['error'],
+                $result['status'],
+                $result['details'] ?? [],
+            );
+        }
+
+        return Response::json($result['data'], 201);
+    }
 }

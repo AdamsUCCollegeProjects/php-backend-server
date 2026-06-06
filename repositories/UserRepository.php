@@ -10,7 +10,7 @@ use RuntimeException;
 
 final class UserRepository
 {
-    private const SELECT_COLUMNS = 'id, email, password_hash, name, created_at, updated_at';
+    private const SELECT_COLUMNS = 'id, email, password_hash, name, role, created_at, updated_at';
 
     public function __construct(private readonly PDO $pdo)
     {
@@ -48,15 +48,20 @@ final class UserRepository
         return User::fromRow($row);
     }
 
-    public function create(string $email, string $passwordHash, string $name): User
-    {
+    public function create(
+        string $email,
+        string $passwordHash,
+        string $name,
+        string $role = User::ROLE_USER,
+    ): User {
         $statement = $this->pdo->prepare(
-            'INSERT INTO users (email, password_hash, name) VALUES (:email, :password_hash, :name)',
+            'INSERT INTO users (email, password_hash, name, role) VALUES (:email, :password_hash, :name, :role)',
         );
         $statement->execute([
             'email' => $email,
             'password_hash' => $passwordHash,
             'name' => $name,
+            'role' => $role,
         ]);
 
         $user = $this->findById((int) $this->pdo->lastInsertId());

@@ -23,7 +23,7 @@ final class JwtService
     /**
      * @return array{token: string, expires_in: int}
      */
-    public function generateToken(int $userId, string $email): array
+    public function generateToken(int $userId, string $email, string $role): array
     {
         $issuedAt = time();
         $expiresAt = $issuedAt + $this->ttlSeconds;
@@ -31,6 +31,7 @@ final class JwtService
         $payload = [
             'sub' => $userId,
             'email' => $email,
+            'role' => $role,
             'iat' => $issuedAt,
             'exp' => $expiresAt,
         ];

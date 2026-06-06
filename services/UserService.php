@@ -14,7 +14,7 @@ final class UserService
     }
 
     /**
-     * @return array{id: int, email: string, name: string, created_at: string}|null
+     * @return array{id: int, email: string, name: string, role: string, created_at: string}|null
      */
     public function getProfile(int $userId): ?array
     {
@@ -28,7 +28,7 @@ final class UserService
     }
 
     /**
-     * @return array{id: int, email: string, name: string, created_at: string}
+     * @return array{id: int, email: string, name: string, role: string, created_at: string}
      */
     private function formatProfile(User $user): array
     {
@@ -36,6 +36,7 @@ final class UserService
             'id' => $user->id,
             'email' => $user->email,
             'name' => $user->name,
+            'role' => $user->role,
             'created_at' => $user->createdAt,
         ];
     }

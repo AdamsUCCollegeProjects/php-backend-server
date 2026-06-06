@@ -4,17 +4,12 @@ declare(strict_types=1);
 
 namespace App\Models;
 
-final class User
+final class Category
 {
-    public const ROLE_USER = 'user';
-    public const ROLE_ADMIN = 'admin';
-
     public function __construct(
         public readonly int $id,
-        public readonly string $email,
-        public readonly string $passwordHash,
         public readonly string $name,
-        public readonly string $role,
+        public readonly string $slug,
         public readonly string $createdAt,
         public readonly string $updatedAt,
     ) {
@@ -27,10 +22,8 @@ final class User
     {
         return new self(
             id: (int) $row['id'],
-            email: (string) $row['email'],
-            passwordHash: (string) $row['password_hash'],
             name: (string) $row['name'],
-            role: (string) ($row['role'] ?? self::ROLE_USER),
+            slug: (string) $row['slug'],
             createdAt: (string) $row['created_at'],
             updatedAt: (string) $row['updated_at'],
         );

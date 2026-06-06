@@ -14,6 +14,7 @@ use UnexpectedValueException;
 final class AuthMiddleware
 {
     public const ATTRIBUTE_USER_ID = 'userId';
+    public const ATTRIBUTE_USER_ROLE = 'userRole';
     private const HEADER_AUTHORIZATION = 'authorization';
     private const BEARER_PREFIX = 'Bearer ';
 
@@ -32,12 +33,14 @@ final class AuthMiddleware
         try {
             $payload = $this->jwtService->decode($token);
             $userId = $this->extractUserId($payload);
+            $role = $this->extractRole($payload);
 
-            if ($userId === null) {
+            if ($userId === null || $role === null) {
                 return Response::error('Unauthorized', 401);
             }
 
             $request->setAttribute(self::ATTRIBUTE_USER_ID, $userId);
+            $request->setAttribute(self::ATTRIBUTE_USER_ROLE, $role);
 
             return $next($request);
         } catch (ExpiredException | SignatureInvalidException | UnexpectedValueException) {
@@ -71,5 +74,14 @@ final class AuthMiddleware
         }
 
         return (int) $userId;
+    }
+
+    private function extractRole(object $payload): ?string
+    {
+        if (! property_exists($payload, 'role') || ! is_string($payload->role)) {
+            return null;
+        }
+
+        return $payload->role;
     }
 }
