@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Core;
 
 use App\Controllers\AdminCategoryController;
+use App\Controllers\AdminDashboardController;
+use App\Controllers\AdminOrderController;
 use App\Controllers\AdminProductController;
 use App\Controllers\AuthController;
 use App\Controllers\CartController;
@@ -16,11 +18,13 @@ use App\Controllers\ProductController;
 use App\Controllers\ProfileController;
 use App\Middleware\AdminMiddleware;
 use App\Middleware\AuthMiddleware;
+use App\Repositories\AdminStatsRepository;
 use App\Repositories\CartRepository;
 use App\Repositories\CategoryRepository;
 use App\Repositories\OrderRepository;
 use App\Repositories\ProductRepository;
 use App\Repositories\UserRepository;
+use App\Services\AdminDashboardService;
 use App\Services\AuthService;
 use App\Services\CartService;
 use App\Services\CategoryService;
@@ -42,6 +46,8 @@ final class RouteDependencies
         public readonly CartController $cartController,
         public readonly CheckoutController $checkoutController,
         public readonly OrderController $orderController,
+        public readonly AdminDashboardController $adminDashboardController,
+        public readonly AdminOrderController $adminOrderController,
         public readonly AuthMiddleware $authMiddleware,
         public readonly AdminMiddleware $adminMiddleware,
     ) {
@@ -55,6 +61,7 @@ final class RouteDependencies
         $productRepository = new ProductRepository($pdo);
         $cartRepository = new CartRepository($pdo);
         $orderRepository = new OrderRepository($pdo, $productRepository, $cartRepository);
+        $adminStatsRepository = new AdminStatsRepository($pdo);
         $validator = new Validator();
         $logger = Logger::getInstance();
 
@@ -73,6 +80,7 @@ final class RouteDependencies
         $productService = new ProductService($productRepository, $categoryRepository, $validator);
         $cartService = new CartService($cartRepository, $productRepository, $validator);
         $orderService = new OrderService($orderRepository, $cartRepository, $validator);
+        $adminDashboardService = new AdminDashboardService($adminStatsRepository, $orderService);
 
         return new self(
             new HealthController(),
@@ -85,6 +93,8 @@ final class RouteDependencies
             new CartController($cartService),
             new CheckoutController($orderService),
             new OrderController($orderService),
+            new AdminDashboardController($adminDashboardService),
+            new AdminOrderController($orderService),
             new AuthMiddleware($jwtService),
             new AdminMiddleware(),
         );

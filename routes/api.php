@@ -46,4 +46,9 @@ return static function (Router $router, RouteDependencies $dependencies): void {
 
     $router->get('/api/orders', [$dependencies->orderController, 'index'], $auth);
     $router->get('/api/orders/{id}', [$dependencies->orderController, 'show'], $auth);
+
+    $router->get('/api/admin/dashboard', [$dependencies->adminDashboardController, 'show'], $admin);
+    $router->get('/api/admin/orders', [$dependencies->adminOrderController, 'index'], $admin);
+    $router->get('/api/admin/orders/{id}', [$dependencies->adminOrderController, 'show'], $admin);
+    $router->patch('/api/admin/orders/{id}', [$dependencies->adminOrderController, 'updateStatus'], $admin);
 };

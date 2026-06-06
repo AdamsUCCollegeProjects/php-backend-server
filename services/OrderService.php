@@ -21,6 +21,7 @@ final class OrderService
     private const ERROR_EMPTY_CART = 'Cart is empty';
     private const ERROR_NOT_FOUND = 'Order not found';
     private const ERROR_FORBIDDEN = 'Forbidden';
+    private const ERROR_INVALID_STATUS = 'Invalid order status';
 
     public function __construct(
         private readonly OrderRepository $orderRepository,
@@ -94,6 +95,73 @@ final class OrderService
     }
 
     /**
+     * @return array{ok: true, data: list<array<string, mixed>>}
+     */
+    public function listAll(): array
+    {
+        $orders = $this->orderRepository->findAll();
+
+        return [
+            'ok' => true,
+            'data' => $this->formatAdminOrderSummaries($orders),
+        ];
+    }
+
+    /**
+     * @return array{ok: true, data: array<string, mixed>}|array{ok: false, status: int, error: string}
+     */
+    public function getById(int $orderId): array
+    {
+        $order = $this->orderRepository->findById($orderId);
+
+        if ($order === null) {
+            return $this->notFoundFailure();
+        }
+
+        $items = $this->orderRepository->findItemsByOrderId($orderId);
+
+        return ['ok' => true, 'data' => $this->formatAdminOrderDetail($order, $items)];
+    }
+
+    /**
+     * @param array<string, mixed> $input
+     * @return array{ok: true, data: array<string, mixed>}|array{ok: false, status: int, error: string, details?: array<string, string>}
+     */
+    public function updateStatus(int $orderId, array $input): array
+    {
+        $errors = $this->validator->validate($input, ['status' => ['required']]);
+
+        if ($errors !== []) {
+            return $this->validationFailure($errors);
+        }
+
+        $status = trim((string) $input['status']);
+
+        if (! in_array($status, Order::VALID_STATUSES, true)) {
+            return ['ok' => false, 'status' => 400, 'error' => self::ERROR_INVALID_STATUS];
+        }
+
+        $updatedOrder = $this->orderRepository->updateStatus($orderId, $status);
+
+        if ($updatedOrder === null) {
+            return $this->notFoundFailure();
+        }
+
+        $items = $this->orderRepository->findItemsByOrderId($orderId);
+
+        return ['ok' => true, 'data' => $this->formatAdminOrderDetail($updatedOrder, $items)];
+    }
+
+    /**
+     * @param list<Order> $orders
+     * @return list<array<string, mixed>>
+     */
+    public function formatAdminOrderSummaries(array $orders): array
+    {
+        return array_map($this->formatAdminOrderSummary(...), $orders);
+    }
+
+    /**
      * @return array<string, list<string>>
      */
     private function shippingRules(): array
@@ -131,6 +199,29 @@ final class OrderService
         return [
             ...$this->formatOrderSummary($order),
             'items' => array_map($this->formatOrderItem(...), $items),
+        ];
+    }
+
+    /**
+     * @param list<OrderItem> $items
+     * @return array<string, mixed>
+     */
+    private function formatAdminOrderDetail(Order $order, array $items): array
+    {
+        return [
+            ...$this->formatAdminOrderSummary($order),
+            'items' => array_map($this->formatOrderItem(...), $items),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function formatAdminOrderSummary(Order $order): array
+    {
+        return [
+            ...$this->formatOrderSummary($order),
+            'user_id' => $order->userId,
         ];
     }
 

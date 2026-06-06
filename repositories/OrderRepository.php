@@ -29,6 +29,25 @@ final class OrderRepository
     /**
      * @return list<Order>
      */
+    public function findAll(): array
+    {
+        $statement = $this->pdo->query(
+            'SELECT ' . self::ORDER_COLUMNS . ' FROM orders ORDER BY created_at DESC',
+        );
+
+        if ($statement === false) {
+            return [];
+        }
+
+        return array_map(
+            static fn (array $row): Order => Order::fromRow($row),
+            $statement->fetchAll(),
+        );
+    }
+
+    /**
+     * @return list<Order>
+     */
     public function findByUserId(int $userId): array
     {
         $statement = $this->pdo->prepare(
@@ -72,6 +91,20 @@ final class OrderRepository
             static fn (array $row): OrderItem => OrderItem::fromRow($row),
             $statement->fetchAll(),
         );
+    }
+
+    public function updateStatus(int $id, string $status): ?Order
+    {
+        $order = $this->findById($id);
+
+        if ($order === null) {
+            return null;
+        }
+
+        $statement = $this->pdo->prepare('UPDATE orders SET status = :status WHERE id = :id');
+        $statement->execute(['status' => $status, 'id' => $id]);
+
+        return $this->findById($id);
     }
 
     /**
