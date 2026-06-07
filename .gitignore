@@ -4,4 +4,6 @@ vendor/
 mysql_data/
 storage/*
 !storage/.gitkeep
+!storage/providers/
+!storage/providers/**
 *.log
