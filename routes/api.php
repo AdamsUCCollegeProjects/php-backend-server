@@ -43,6 +43,7 @@ return static function (Router $router, RouteDependencies $dependencies): void {
     $router->delete('/api/cart/items/{productId}', [$dependencies->cartController, 'removeItem'], $auth);
 
     $router->post('/api/checkout', [$dependencies->checkoutController, 'store'], $auth);
+    $router->post('/api/webhooks/payway', [$dependencies->payWayWebhookController, 'handle']);
 
     $router->get('/api/orders', [$dependencies->orderController, 'index'], $auth);
     $router->get('/api/orders/{id}', [$dependencies->orderController, 'show'], $auth);

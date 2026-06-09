@@ -15,6 +15,7 @@ use App\Controllers\CheckoutController;
 use App\Controllers\FileController;
 use App\Controllers\HealthController;
 use App\Controllers\OrderController;
+use App\Controllers\PayWayWebhookController;
 use App\Controllers\ProductController;
 use App\Controllers\ProfileController;
 use App\Middleware\AdminMiddleware;
@@ -33,7 +34,11 @@ use App\Services\CategoryService;
 use App\Services\FileService;
 use App\Services\ImageProcessor;
 use App\Services\JwtService;
+use App\Services\HttpPayWayService;
+use App\Services\MockPayWayService;
 use App\Services\OrderService;
+use App\Services\PayWayHashGenerator;
+use App\Services\PayWayServiceInterface;
 use App\Services\ProductService;
 use App\Services\UserService;
 use App\Storage\Providers\LocalStorageProvider;
@@ -50,6 +55,7 @@ final class RouteDependencies
         public readonly AdminProductController $adminProductController,
         public readonly CartController $cartController,
         public readonly CheckoutController $checkoutController,
+        public readonly PayWayWebhookController $payWayWebhookController,
         public readonly OrderController $orderController,
         public readonly AdminDashboardController $adminDashboardController,
         public readonly AdminOrderController $adminOrderController,
@@ -98,7 +104,26 @@ final class RouteDependencies
         $categoryService = new CategoryService($categoryRepository, $validator);
         $productService = new ProductService($productRepository, $categoryRepository, $fileRepository, $validator);
         $cartService = new CartService($cartRepository, $productRepository, $validator);
-        $orderService = new OrderService($orderRepository, $cartRepository, $validator);
+
+        /** @var array{
+         *     mock: bool,
+         *     merchant_id: string,
+         *     public_key: string,
+         *     checkout_url: string,
+         *     success_url_template: string,
+         *     webhook_url: string,
+         *     payment_option: string,
+         * } $paywayConfig */
+        $paywayConfig = require dirname(__DIR__) . '/config/payway.php';
+
+        $payWayService = self::createPayWayService($paywayConfig);
+        $orderService = new OrderService(
+            $orderRepository,
+            $cartRepository,
+            $userRepository,
+            $payWayService,
+            $validator,
+        );
         $adminDashboardService = new AdminDashboardService($adminStatsRepository, $orderService);
         $imageProcessor = new ImageProcessor($storageConfig);
         $fileService = new FileService(
@@ -119,6 +144,7 @@ final class RouteDependencies
             new AdminProductController($productService),
             new CartController($cartService),
             new CheckoutController($orderService),
+            new PayWayWebhookController($orderService),
             new OrderController($orderService),
             new AdminDashboardController($adminDashboardService),
             new AdminOrderController($orderService),
@@ -126,5 +152,28 @@ final class RouteDependencies
             new AuthMiddleware($jwtService),
             new AdminMiddleware(),
         );
+    }
+
+    /**
+     * @param array{
+     *     mock: bool,
+     *     merchant_id: string,
+     *     public_key: string,
+     *     checkout_url: string,
+     *     success_url_template: string,
+     *     webhook_url: string,
+     *     payment_option: string,
+     * } $paywayConfig
+     */
+    private static function createPayWayService(array $paywayConfig): PayWayServiceInterface
+    {
+        if ($paywayConfig['mock']) {
+            return new MockPayWayService([
+                'webhook_url' => $paywayConfig['webhook_url'],
+                'success_url_template' => $paywayConfig['success_url_template'],
+            ]);
+        }
+
+        return new HttpPayWayService($paywayConfig, new PayWayHashGenerator());
     }
 }

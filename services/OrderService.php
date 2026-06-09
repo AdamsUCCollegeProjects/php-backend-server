@@ -9,6 +9,10 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Repositories\CartRepository;
 use App\Repositories\OrderRepository;
+use App\Repositories\UserRepository;
+use DateTimeImmutable;
+use DateTimeZone;
+use RuntimeException;
 
 final class OrderService
 {
@@ -22,10 +26,18 @@ final class OrderService
     private const ERROR_NOT_FOUND = 'Order not found';
     private const ERROR_FORBIDDEN = 'Forbidden';
     private const ERROR_INVALID_STATUS = 'Invalid order status';
+    private const ERROR_USER_NOT_FOUND = 'User not found';
+    private const ERROR_PAYMENT_INIT_FAILED = 'Payment initiation failed';
+    private const ERROR_MISSING_TRAN_ID = 'Missing tran_id';
+    private const ERROR_PAYMENT_UPDATE_FAILED = 'Failed to update order payment';
+    private const PAYWAY_TRAN_ID_TIME_FORMAT = 'YmdHis';
+    private const PAYWAY_SUCCESS_STATUS = 0;
 
     public function __construct(
         private readonly OrderRepository $orderRepository,
         private readonly CartRepository $cartRepository,
+        private readonly UserRepository $userRepository,
+        private readonly PayWayServiceInterface $payWayService,
         private readonly Validator $validator,
     ) {
     }
@@ -55,10 +67,39 @@ final class OrderService
             return ['ok' => false, 'status' => $result['status'], 'error' => $result['error']];
         }
 
-        return [
-            'ok' => true,
-            'data' => $this->formatOrderDetail($result['order'], $result['items']),
-        ];
+        return $this->completeCheckoutWithPayment($userId, $result['order'], $result['items']);
+    }
+
+    /**
+     * @return array{ok: true}|array{ok: false, status: int, error: string}
+     */
+    public function processPayWayWebhook(string $tranId, string $apv, mixed $status): array
+    {
+        if ($tranId === '') {
+            return ['ok' => false, 'status' => 400, 'error' => self::ERROR_MISSING_TRAN_ID];
+        }
+
+        $order = $this->orderRepository->findByPayWayTranId($tranId);
+
+        if ($order === null) {
+            return $this->notFoundFailure();
+        }
+
+        if ($order->paymentStatus === Order::PAYMENT_STATUS_PAID) {
+            return ['ok' => true];
+        }
+
+        if ((int) $status !== self::PAYWAY_SUCCESS_STATUS) {
+            return ['ok' => true];
+        }
+
+        $updatedOrder = $this->orderRepository->markPaymentPaid($order->id, $apv);
+
+        if ($updatedOrder === null) {
+            return ['ok' => false, 'status' => 500, 'error' => self::ERROR_PAYMENT_UPDATE_FAILED];
+        }
+
+        return ['ok' => true];
     }
 
     /**
@@ -234,6 +275,9 @@ final class OrderService
             'id' => $order->id,
             'status' => $order->status,
             'total' => $order->total,
+            'payment_status' => $order->paymentStatus,
+            'payway_tran_id' => $order->paywayTranId,
+            'payway_apv' => $order->paywayApv,
             'shipping_name' => $order->shippingName,
             'shipping_address' => $order->shippingAddress,
             'shipping_city' => $order->shippingCity,
@@ -242,6 +286,54 @@ final class OrderService
             'created_at' => $order->createdAt,
             'updated_at' => $order->updatedAt,
         ];
+    }
+
+    /**
+     * @param list<OrderItem> $items
+     * @return array{ok: true, data: array<string, mixed>}|array{ok: false, status: int, error: string}
+     */
+    private function completeCheckoutWithPayment(int $userId, Order $order, array $items): array
+    {
+        $user = $this->userRepository->findById($userId);
+
+        if ($user === null) {
+            return ['ok' => false, 'status' => 500, 'error' => self::ERROR_USER_NOT_FOUND];
+        }
+
+        $orderWithTranId = $this->persistPayWayTranId($order);
+
+        if ($orderWithTranId === null) {
+            return ['ok' => false, 'status' => 500, 'error' => self::ERROR_PAYMENT_INIT_FAILED];
+        }
+
+        try {
+            $purchaseResult = $this->payWayService->createPurchase($orderWithTranId, $user);
+        } catch (RuntimeException) {
+            return ['ok' => false, 'status' => 502, 'error' => self::ERROR_PAYMENT_INIT_FAILED];
+        }
+
+        return [
+            'ok' => true,
+            'data' => [
+                ...$this->formatOrderDetail($orderWithTranId, $items),
+                'checkout_html' => $purchaseResult->checkoutHtml,
+            ],
+        ];
+    }
+
+    private function persistPayWayTranId(Order $order): ?Order
+    {
+        $tranId = $this->generatePayWayTranId($order->id);
+
+        return $this->orderRepository->updatePayWayTranId($order->id, $tranId);
+    }
+
+    private function generatePayWayTranId(int $orderId): string
+    {
+        $timestamp = (new DateTimeImmutable('now', new DateTimeZone('UTC')))
+            ->format(self::PAYWAY_TRAN_ID_TIME_FORMAT);
+
+        return sprintf('ORD-%d-%s', $orderId, $timestamp);
     }
 
     /**
