@@ -12,6 +12,17 @@ final class Order
     public const STATUS_DELIVERED = 'delivered';
     public const STATUS_CANCELLED = 'cancelled';
 
+    public const PAYMENT_STATUS_AWAITING = 'awaiting';
+    public const PAYMENT_STATUS_PAID = 'paid';
+    public const PAYMENT_STATUS_FAILED = 'failed';
+
+    /** @var list<string> */
+    public const VALID_PAYMENT_STATUSES = [
+        self::PAYMENT_STATUS_AWAITING,
+        self::PAYMENT_STATUS_PAID,
+        self::PAYMENT_STATUS_FAILED,
+    ];
+
     /** @var list<string> */
     public const VALID_STATUSES = [
         self::STATUS_PENDING,
@@ -31,6 +42,9 @@ final class Order
         public readonly string $shippingCity,
         public readonly string $shippingPostalCode,
         public readonly string $shippingPhone,
+        public readonly ?string $paywayTranId,
+        public readonly ?string $paywayApv,
+        public readonly string $paymentStatus,
         public readonly string $createdAt,
         public readonly string $updatedAt,
     ) {
@@ -51,6 +65,9 @@ final class Order
             shippingCity: (string) $row['shipping_city'],
             shippingPostalCode: (string) $row['shipping_postal_code'],
             shippingPhone: (string) $row['shipping_phone'],
+            paywayTranId: isset($row['payway_tran_id']) ? (string) $row['payway_tran_id'] : null,
+            paywayApv: isset($row['payway_apv']) ? (string) $row['payway_apv'] : null,
+            paymentStatus: (string) ($row['payment_status'] ?? self::PAYMENT_STATUS_AWAITING),
             createdAt: (string) $row['created_at'],
             updatedAt: (string) $row['updated_at'],
         );

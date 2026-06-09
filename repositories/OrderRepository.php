@@ -14,7 +14,8 @@ use RuntimeException;
 final class OrderRepository
 {
     private const ORDER_COLUMNS = 'id, user_id, status, total, shipping_name, shipping_address,
-        shipping_city, shipping_postal_code, shipping_phone, created_at, updated_at';
+        shipping_city, shipping_postal_code, shipping_phone, payway_tran_id, payway_apv,
+        payment_status, created_at, updated_at';
     private const ITEM_COLUMNS = 'id, order_id, product_id, product_name, unit_price, quantity';
     private const ERROR_INSUFFICIENT_STOCK = 'Insufficient stock for one or more products';
     private const ERROR_CHECKOUT_FAILED = 'Checkout failed';
@@ -103,6 +104,49 @@ final class OrderRepository
 
         $statement = $this->pdo->prepare('UPDATE orders SET status = :status WHERE id = :id');
         $statement->execute(['status' => $status, 'id' => $id]);
+
+        return $this->findById($id);
+    }
+
+    public function findByPayWayTranId(string $tranId): ?Order
+    {
+        $statement = $this->pdo->prepare(
+            'SELECT ' . self::ORDER_COLUMNS . ' FROM orders WHERE payway_tran_id = :payway_tran_id LIMIT 1',
+        );
+        $statement->execute(['payway_tran_id' => $tranId]);
+
+        $row = $statement->fetch();
+
+        if ($row === false) {
+            return null;
+        }
+
+        return Order::fromRow($row);
+    }
+
+    public function updatePayWayTranId(int $id, string $tranId): ?Order
+    {
+        $statement = $this->pdo->prepare(
+            'UPDATE orders SET payway_tran_id = :payway_tran_id WHERE id = :id',
+        );
+        $statement->execute(['payway_tran_id' => $tranId, 'id' => $id]);
+
+        return $this->findById($id);
+    }
+
+    public function markPaymentPaid(int $id, string $apv): ?Order
+    {
+        $statement = $this->pdo->prepare(
+            'UPDATE orders
+             SET payment_status = :payment_status, payway_apv = :payway_apv, status = :status
+             WHERE id = :id',
+        );
+        $statement->execute([
+            'payment_status' => Order::PAYMENT_STATUS_PAID,
+            'payway_apv' => $apv,
+            'status' => Order::STATUS_CONFIRMED,
+            'id' => $id,
+        ]);
 
         return $this->findById($id);
     }

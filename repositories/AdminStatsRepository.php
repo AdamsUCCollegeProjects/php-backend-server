@@ -10,7 +10,8 @@ use PDO;
 final class AdminStatsRepository
 {
     private const ORDER_COLUMNS = 'id, user_id, status, total, shipping_name, shipping_address,
-        shipping_city, shipping_postal_code, shipping_phone, created_at, updated_at';
+        shipping_city, shipping_postal_code, shipping_phone, payway_tran_id, payway_apv,
+        payment_status, created_at, updated_at';
 
     public function __construct(private readonly PDO $pdo)
     {
