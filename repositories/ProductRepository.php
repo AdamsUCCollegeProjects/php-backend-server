@@ -154,6 +154,16 @@ final class ProductRepository
         return $statement->rowCount() > 0;
     }
 
+    public function hasOrderItems(int $productId): bool
+    {
+        $statement = $this->pdo->prepare(
+            'SELECT COUNT(*) FROM order_items WHERE product_id = :product_id',
+        );
+        $statement->execute(['product_id' => $productId]);
+
+        return (int) $statement->fetchColumn() > 0;
+    }
+
     /**
      * @return list<Product>
      */
