@@ -26,7 +26,7 @@ final class ProductRepository
         }
 
         $statement = $this->pdo->query(
-            'SELECT ' . self::SELECT_COLUMNS . ' FROM products ORDER BY name ASC',
+            'SELECT ' . self::SELECT_COLUMNS . ' FROM products WHERE deleted_at IS NULL ORDER BY name ASC',
         );
 
         if ($statement === false) {
@@ -39,7 +39,7 @@ final class ProductRepository
     public function findById(int $id): ?Product
     {
         $statement = $this->pdo->prepare(
-            'SELECT ' . self::SELECT_COLUMNS . ' FROM products WHERE id = :id LIMIT 1',
+            'SELECT ' . self::SELECT_COLUMNS . ' FROM products WHERE id = :id AND deleted_at IS NULL LIMIT 1',
         );
         $statement->execute(['id' => $id]);
 
@@ -55,7 +55,7 @@ final class ProductRepository
     public function findByIdForUpdate(int $id): ?Product
     {
         $statement = $this->pdo->prepare(
-            'SELECT ' . self::SELECT_COLUMNS . ' FROM products WHERE id = :id LIMIT 1 FOR UPDATE',
+            'SELECT ' . self::SELECT_COLUMNS . ' FROM products WHERE id = :id AND deleted_at IS NULL LIMIT 1 FOR UPDATE',
         );
         $statement->execute(['id' => $id]);
 
@@ -71,7 +71,7 @@ final class ProductRepository
     public function countByCategoryId(int $categoryId): int
     {
         $statement = $this->pdo->prepare(
-            'SELECT COUNT(*) FROM products WHERE category_id = :category_id',
+            'SELECT COUNT(*) FROM products WHERE category_id = :category_id AND deleted_at IS NULL',
         );
         $statement->execute(['category_id' => $categoryId]);
 
@@ -135,7 +135,9 @@ final class ProductRepository
     public function decrementStock(int $id, int $quantity): bool
     {
         $statement = $this->pdo->prepare(
-            'UPDATE products SET stock = stock - :quantity WHERE id = :id AND stock >= :minimum_stock',
+            'UPDATE products
+             SET stock = stock - :quantity
+             WHERE id = :id AND deleted_at IS NULL AND stock >= :minimum_stock',
         );
         $statement->execute([
             'id' => $id,
@@ -148,20 +150,12 @@ final class ProductRepository
 
     public function delete(int $id): bool
     {
-        $statement = $this->pdo->prepare('DELETE FROM products WHERE id = :id');
+        $statement = $this->pdo->prepare(
+            'UPDATE products SET deleted_at = CURRENT_TIMESTAMP WHERE id = :id AND deleted_at IS NULL',
+        );
         $statement->execute(['id' => $id]);
 
         return $statement->rowCount() > 0;
-    }
-
-    public function hasOrderItems(int $productId): bool
-    {
-        $statement = $this->pdo->prepare(
-            'SELECT COUNT(*) FROM order_items WHERE product_id = :product_id',
-        );
-        $statement->execute(['product_id' => $productId]);
-
-        return (int) $statement->fetchColumn() > 0;
     }
 
     /**
@@ -170,7 +164,9 @@ final class ProductRepository
     private function findAllByCategoryId(int $categoryId): array
     {
         $statement = $this->pdo->prepare(
-            'SELECT ' . self::SELECT_COLUMNS . ' FROM products WHERE category_id = :category_id ORDER BY name ASC',
+            'SELECT ' . self::SELECT_COLUMNS . ' FROM products
+             WHERE category_id = :category_id AND deleted_at IS NULL
+             ORDER BY name ASC',
         );
         $statement->execute(['category_id' => $categoryId]);
 

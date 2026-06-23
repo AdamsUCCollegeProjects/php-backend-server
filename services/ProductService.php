@@ -21,7 +21,6 @@ final class ProductService
     private const ERROR_NOT_FOUND = 'Product not found';
     private const ERROR_CATEGORY_NOT_FOUND = 'Category not found';
     private const ERROR_FILE_NOT_FOUND = 'Image file not found';
-    private const ERROR_PRODUCT_HAS_ORDER_ITEMS = 'Cannot delete product with existing order items';
 
     public function __construct(
         private readonly ProductRepository $productRepository,
@@ -128,10 +127,6 @@ final class ProductService
     {
         if ($this->productRepository->findById($id) === null) {
             return $this->notFoundFailure();
-        }
-
-        if ($this->productRepository->hasOrderItems($id)) {
-            return $this->productHasOrderItemsFailure();
         }
 
         $this->productRepository->delete($id);
@@ -278,14 +273,6 @@ final class ProductService
     private function categoryNotFoundFailure(): array
     {
         return ['ok' => false, 'status' => 404, 'error' => self::ERROR_CATEGORY_NOT_FOUND];
-    }
-
-    /**
-     * @return array{ok: false, status: int, error: string}
-     */
-    private function productHasOrderItemsFailure(): array
-    {
-        return ['ok' => false, 'status' => 409, 'error' => self::ERROR_PRODUCT_HAS_ORDER_ITEMS];
     }
 
     /**
