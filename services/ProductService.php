@@ -14,6 +14,7 @@ final class ProductService
 {
     private const MAX_NAME_LENGTH = 200;
     private const MAX_DESCRIPTION_LENGTH = 5000;
+    private const MAX_SEARCH_QUERY_LENGTH = 100;
     private const FILE_URL_PREFIX = '/api/files/';
     private const THUMBNAIL_URL_SUFFIX = '/thumbnail';
     private const UUID_PATTERN = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i';
@@ -33,13 +34,14 @@ final class ProductService
     /**
      * @return array{ok: true, data: list<array<string, mixed>>}
      */
-    public function listAll(?int $categoryId = null): array
+    public function listAll(?int $categoryId = null, ?string $searchQuery = null): array
     {
         if ($categoryId !== null && $this->categoryRepository->findById($categoryId) === null) {
             return $this->categoryNotFoundFailure();
         }
 
-        $products = $this->productRepository->findAll($categoryId);
+        $normalizedSearchQuery = $this->normalizeSearchQuery($searchQuery);
+        $products = $this->productRepository->findAll($categoryId, $normalizedSearchQuery);
 
         return [
             'ok' => true,
@@ -273,6 +275,21 @@ final class ProductService
     private function categoryNotFoundFailure(): array
     {
         return ['ok' => false, 'status' => 404, 'error' => self::ERROR_CATEGORY_NOT_FOUND];
+    }
+
+    private function normalizeSearchQuery(?string $searchQuery): ?string
+    {
+        if ($searchQuery === null) {
+            return null;
+        }
+
+        $trimmedQuery = trim($searchQuery);
+
+        if ($trimmedQuery === '') {
+            return null;
+        }
+
+        return mb_substr($trimmedQuery, 0, self::MAX_SEARCH_QUERY_LENGTH);
     }
 
     /**

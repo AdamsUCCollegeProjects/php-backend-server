@@ -18,7 +18,8 @@ final class ProductController
     public function index(Request $request): Response
     {
         $categoryId = $this->extractCategoryFilter($request);
-        $result = $this->productService->listAll($categoryId);
+        $searchQuery = $this->extractSearchQuery($request);
+        $result = $this->productService->listAll($categoryId, $searchQuery);
 
         if (! $result['ok']) {
             return Response::error($result['error'], $result['status']);
@@ -55,6 +56,19 @@ final class ProductController
         $parsed = filter_var($categoryId, FILTER_VALIDATE_INT);
 
         return $parsed !== false ? $parsed : null;
+    }
+
+    private function extractSearchQuery(Request $request): ?string
+    {
+        $searchQuery = $request->getQueryValue('q');
+
+        if ($searchQuery === null) {
+            return null;
+        }
+
+        $trimmedQuery = trim($searchQuery);
+
+        return $trimmedQuery === '' ? null : $trimmedQuery;
     }
 
     private function extractProductId(Request $request): ?int

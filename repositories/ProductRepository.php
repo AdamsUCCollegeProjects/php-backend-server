@@ -19,19 +19,28 @@ final class ProductRepository
     /**
      * @return list<Product>
      */
-    public function findAll(?int $categoryId = null): array
+    public function findAll(?int $categoryId = null, ?string $searchQuery = null): array
     {
+        $conditions = ['deleted_at IS NULL'];
+        $params = [];
+
         if ($categoryId !== null) {
-            return $this->findAllByCategoryId($categoryId);
+            $conditions[] = 'category_id = :category_id';
+            $params['category_id'] = $categoryId;
         }
 
-        $statement = $this->pdo->query(
-            'SELECT ' . self::SELECT_COLUMNS . ' FROM products WHERE deleted_at IS NULL ORDER BY name ASC',
+        if ($searchQuery !== null) {
+            $conditions[] = '(name LIKE :search_name OR description LIKE :search_description)';
+            $searchPattern = '%' . $searchQuery . '%';
+            $params['search_name'] = $searchPattern;
+            $params['search_description'] = $searchPattern;
+        }
+
+        $whereClause = implode(' AND ', $conditions);
+        $statement = $this->pdo->prepare(
+            'SELECT ' . self::SELECT_COLUMNS . ' FROM products WHERE ' . $whereClause . ' ORDER BY name ASC',
         );
-
-        if ($statement === false) {
-            return [];
-        }
+        $statement->execute($params);
 
         return $this->mapRows($statement->fetchAll());
     }
@@ -156,21 +165,6 @@ final class ProductRepository
         $statement->execute(['id' => $id]);
 
         return $statement->rowCount() > 0;
-    }
-
-    /**
-     * @return list<Product>
-     */
-    private function findAllByCategoryId(int $categoryId): array
-    {
-        $statement = $this->pdo->prepare(
-            'SELECT ' . self::SELECT_COLUMNS . ' FROM products
-             WHERE category_id = :category_id AND deleted_at IS NULL
-             ORDER BY name ASC',
-        );
-        $statement->execute(['category_id' => $categoryId]);
-
-        return $this->mapRows($statement->fetchAll());
     }
 
     /**
